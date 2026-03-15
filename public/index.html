@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>VoiceNet - Local Audio Chat</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #f6d365, #fda085);
+      margin: 0;
+      padding: 16px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0; font-size: 1.5rem; color: #333; flex: 1 1 100%; text-align: center; }
+    #user { font-weight: bold; color: #333; font-size: 1rem; flex: 1 1 100%; text-align: center; margin-bottom: 8px; }
+    #logoutBtn, #recordBtn, #refreshBtn {
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: none;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      max-width: 180px;
+      margin: 4px auto;
+      display: block;
+    }
+    #logoutBtn { background: #333; color: #fff; }
+    #recordBtn { background: #ff7043; color: #fff; }
+    #refreshBtn { background: #007bff; color: #fff; }
+    .menu-dots { font-size: 24px; cursor: pointer; user-select: none; background: transparent; border: none; color: #333; margin: 0 auto; }
+    .menu-popup {
+      display: none;
+      position: absolute;
+      top: 60px;
+      right: 16px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      z-index: 1000;
+      padding: 10px;
+    }
+    .menu-popup button { display: block; width: 100%; padding: 10px; margin-bottom: 6px; background: #f9f9f9; border: none; text-align: left; cursor: pointer; font-size: 1rem; border-radius: 6px; }
+    #status { margin-top: 12px; font-size: 1rem; color: #333; text-align: center; }
+    #clips { margin-top: 20px; }
+    .clip {
+      background: rgba(255, 255, 255, 0.85);
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .clip.right { align-items: flex-end; }
+    audio { width: 100%; max-width: 320px; }
+    .sender { font-size: 0.9rem; color: #555; margin-top: 6px; }
+    .controls-row { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    .small-btn {
+      background: #ff3333;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .small-btn.secondary { background: #6c757d; }
+    @media (min-width: 600px) {
+      #logoutBtn, #recordBtn, #refreshBtn { width: auto; margin: 4px; display: inline-block; }
+      header { justify-content: center; }
+      #user { text-align: left; flex: 0 1 auto; }
+      h1 { flex: 1 1 auto; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // Redirect if not logged in
+    const user = localStorage.getItem('voicenet_user');
+    if (!user) window.location.href = 'login.html';
+  </script>
+
+  <header>
+    <h1>VoiceNet - Local Audio Chat</h1>
+    <span id="user"></span>
+    <button id="logoutBtn">Logout</button>
+    <button id="recordBtn" type="button">🎤 Hold to Talk</button>
+    <button id="refreshBtn" type="button">🔄 Refresh</button>
+    <div class="menu-dots" onclick="toggleMenu()">⋮</div>
+    <div id="menuPopup" class="menu-popup">
+      <a href="active.html" target="_blank"><button>👥 Active Users</button></a>
+      <a href="user-details.html" target="_blank"><button>🧑‍💼 All User Details</button></a>
+      <a href="chat.html"><button>💬 Open Chat</button></a>
+    </div>
+  </header>
+
+  <p>Hold the button to record. Release to send.</p>
+  <div id="status">Idle</div>
+  <div id="clips"></div>
+
+  <script>
+    function toggleMenu() {
+      const popup = document.getElementById('menuPopup');
+      popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
+    }
+    window.addEventListener('click', (e) => {
+      const popup = document.getElementById('menuPopup');
+      const dots = document.querySelector('.menu-dots');
+      if (!popup.contains(e.target) && e.target !== dots) popup.style.display = 'none';
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded ✅');
+
+      if (Notification.permission !== 'granted') {
+        Notification.requestPermission().then(p => console.log('Notification permission:', p));
+      }
+
+      const baseUser = localStorage.getItem('voicenet_user');
+      const playedUrls = new Set();
+      const clipQueue = [];
+      let isPlaying = false;
+
+      document.getElementById('user').textContent = `Welcome, ${baseUser}`;
+
+      document.getElementById('logoutBtn').addEventListener('click', async () => {
+        localStorage.removeItem('voicenet_user');
+        // Optional: tell server about logout
+        try { await fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registerNumber: baseUser }) }); } catch(e) {}
+        window.location.href = 'login.html';
+      });
+
+      const recordBtn = document.getElementById('recordBtn');
+      const status = document.getElementById('status');
+      const clips = document.getElementById('clips');
+      let mediaRecorder;
+      let chunks = [];
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${wsProtocol}://${location.host}`);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        ws.send(JSON.stringify({ type: 'login', registerNumber: baseUser }));
+      };
+
+      // Load previously uploaded clips
+      async function loadClips() {
+        try {
+          const res = await fetch('/api/user-clips');
+          const list = await res.json();
+          // sort by timestamp desc (most recent first) if timestamp exists
+          list.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+          clips.innerHTML = ''; // clear existing
+          for (const c of list) {
+            const url = `/uploads/${encodeURIComponent(c.filename)}`;
+            // avoid duplicating same url
+            if (playedUrls.has(url)) continue;
+            renderClip({ url, clientId: c.registerNumber, filename: c.filename, ts: c.timestamp }, false);
+            playedUrls.add(url);
+          }
+        } catch (err) {
+          console.error('Failed to load clips:', err);
+        }
+      }
+
+      loadClips();
+
+      // RECEIVED AUDIO via WS
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'audio') {
+            // ignore if it's from self
+            if (data.clientId?.trim() === baseUser?.trim()) return;
+            const url = data.url;
+            if (playedUrls.has(url)) return;
+
+            playedUrls.add(url);
+            clipQueue.push({ url: data.url, clientId: data.clientId });
+            if (!isPlaying) playNextClip();
+
+            if (Notification.permission === 'granted') {
+              new Notification('📢 New Voice Message', {
+                body: `From ${data.clientId}`,
+                icon: 'mic.png'
+              });
+            }
+            if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+
+            // Render on UI (received)
+            renderClip({ url: data.url, clientId: data.clientId, filename: url.split('/').pop(), ts: Date.now() }, true);
+          }
+          if (data.type === 'text') {
+            // handle chat text if needed
+          }
+        } catch (e) {
+          console.error('WS message parse error', e);
+        }
+      };
+
+      function playNextClip() {
+        if (clipQueue.length === 0) {
+          isPlaying = false;
+          return;
+        }
+        isPlaying = true;
+        const next = clipQueue.shift();
+        const audioElem = new Audio(next.url);
+        audioElem.autoplay = true;
+        audioElem.controls = true;
+
+        audioElem.addEventListener('canplay', () => {
+          audioElem.play().catch(() => {});
+        });
+
+        audioElem.onended = () => {
+          isPlaying = false;
+          playNextClip();
+        };
+
+        // Show the playing clip visually (also added by renderClip above)
+      }
+
+      // Render a clip object into #clips
+      function renderClip({ url, clientId, filename, ts }, isNew = true) {
+        const clip = document.createElement('div');
+        clip.className = 'clip' + (clientId === baseUser ? ' right' : '');
+        const audioElem = document.createElement('audio');
+        audioElem.controls = true;
+        audioElem.src = url;
+
+        const senderTag = document.createElement('div');
+        senderTag.className = 'sender';
+        senderTag.textContent = `— ${clientId === baseUser ? 'You' : clientId}`;
+
+        clip.appendChild(audioElem);
+        clip.appendChild(senderTag);
+
+        // controls row for delete or other actions
+        const controls = document.createElement('div');
+        controls.className = 'controls-row';
+
+        // If current user is uploader -> show Delete button
+        if (clientId === baseUser) {
+          const delBtn = document.createElement('button');
+          delBtn.className = 'small-btn';
+          delBtn.textContent = '🗑 Delete';
+          delBtn.onclick = async () => {
+            const sure = confirm('Delete this audio permanently?');
+            if (!sure) return;
+            try {
+              const fname = filename || url.split('/').pop();
+              const res = await fetch(`/api/user-clips/${encodeURIComponent(fname)}`, {
+                method: 'DELETE',
+                headers: { 'x-register-number': baseUser }
+              });
+              const json = await res.json();
+              if (res.status === 200 && json.success) {
+                clip.remove();
+              } else {
+                alert(json.message || 'Delete failed');
+              }
+            } catch (err) {
+              console.error('Delete error:', err);
+              alert('Delete failed. See console.');
+            }
+          };
+          controls.appendChild(delBtn);
+        }
+
+        // Optional: a button to copy link
+        const linkBtn = document.createElement('button');
+        linkBtn.className = 'small-btn secondary';
+        linkBtn.textContent = '🔗 Link';
+        linkBtn.onclick = () => {
+          const fullUrl = location.origin + url;
+          navigator.clipboard?.writeText(fullUrl).then(() => {
+            linkBtn.textContent = 'Copied!';
+            setTimeout(() => linkBtn.textContent = '🔗 Link', 1200);
+          }).catch(() => {
+            prompt('Copy this link:', fullUrl);
+          });
+        };
+        controls.appendChild(linkBtn);
+
+        clip.appendChild(controls);
+
+        // add to top as newest
+        if (isNew) clips.prepend(clip);
+        else clips.appendChild(clip);
+      }
+
+      // SEND AUDIO
+      async function startRecording() {
+        status.textContent = 'Recording...';
+        chunks = [];
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.start();
+
+          mediaRecorder.ondataavailable = e => chunks.push(e.data);
+          mediaRecorder.onstop = async () => {
+            const blob = new Blob(chunks, { type: 'audio/ogg; codecs=opus' });
+            const formData = new FormData();
+            formData.append('file', blob);
+            formData.append('clientId', baseUser);
+
+            try {
+              const res = await fetch('/upload', { method: 'POST', body: formData });
+              const result = await res.json();
+
+              if (result.ok && result.url) {
+                ws.send(JSON.stringify({
+                  type: 'audio',
+                  url: result.url,
+                  mimeType: blob.type,
+                  clientId: baseUser
+                }));
+
+                // Render own clip with delete button
+                const clipObj = { url: result.url, clientId: baseUser, filename: result.url.split('/').pop(), ts: Date.now() };
+                renderClip(clipObj, true);
+                playedUrls.add(result.url);
+              } else {
+                console.error('Upload response:', result);
+                alert('Upload failed');
+              }
+            } catch (err) {
+              console.error('Upload error:', err);
+              alert('Upload failed. See console.');
+            }
+          };
+        } catch (err) {
+          console.error('Mic access error:', err);
+          status.textContent = 'Mic access denied or not supported';
+        }
+      }
+
+      function stopRecording() {
+        status.textContent = 'Idle';
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
+      }
+
+      recordBtn.addEventListener('mousedown', startRecording);
+      recordBtn.addEventListener('mouseup', stopRecording);
+      recordBtn.addEventListener('touchstart', startRecording);
+      recordBtn.addEventListener('touchend', stopRecording);
+      recordBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // Refresh button clears visible audio list only (does not delete server files)
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        clips.innerHTML = '';
+      });
+    });
+  </script>
+</body>
+</html>
