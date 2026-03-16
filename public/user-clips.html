@@ -1,87 +1,114 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>User Voice Clips</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 16px; }
-h2 { color: #333; font-size: 1.4rem; margin-bottom: 16px; }
-.clip-block { background: #fff; padding: 12px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-audio { width: 100%; max-width: 320px; margin-top: 8px; }
-button { margin-top: 4px; padding: 4px 8px; border: none; border-radius: 4px; background: #ff4d4d; color: #fff; cursor: pointer; }
-button:hover { background: #e60000; }
-</style>
+  <meta charset="UTF-8" />
+  <title>User Voice Clips</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 16px;
+    }
+    h2 {
+      color: #333;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+    }
+    .clip-block {
+      background: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    audio {
+      width: 100%;
+      max-width: 320px;
+      margin-top: 8px;
+    }
+    button {
+      margin-top: 4px;
+      padding: 4px 8px;
+      border: none;
+      border-radius: 4px;
+      background: #ff4d4d;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #e60000;
+    }
+  </style>
 </head>
 <body>
-<script>
-  const user = localStorage.getItem('voicenet_user');
-  if (!user) window.location.href = 'login.html';
-</script>
+  <script>
+    const user = localStorage.getItem('voicenet_user');
+    if (!user) window.location.href = 'login.html';
+  </script>
 
-<h2 id="title">🔊 Voice Clips</h2>
-<div id="clips"></div>
+  <h2 id="title">🔊 Voice Clips</h2>
+  <div id="clips"></div>
 
-<script>
-const params = new URLSearchParams(window.location.search);
-const reg = params.get('reg');
-document.getElementById('title').textContent = `🔊 Voice Clips for ${reg}`;
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const reg = params.get('reg');
+    document.getElementById('title').textContent = `🔊 Voice Clips for ${reg}`;
 
-async function fetchClips() {
-  const res = await fetch('/api/user-clips');
-  const allClips = await res.json();
-  return allClips.filter(c => String(c.registerNumber) === String(reg));
-}
-
-async function deleteClip(filename) {
-  const ok = confirm("Delete this clip?");
-  if (!ok) return;
-
-  const res = await fetch(`/api/user-clips/${filename}`, { method: "DELETE" });
-  const data = await res.json();
-
-  if (data.success) showClips();
-  else alert("Failed to delete clip");
-}
-async function showClips() {
-  try {
-    const clips = await fetchClips();
-    const container = document.getElementById('clips');
-    container.innerHTML = '';
-
-    if (clips.length === 0) {
-      container.innerHTML = '<p>No clips found for this user.</p>';
-      return;
+    async function fetchClips() {
+      const res = await fetch('/api/user-clips');
+      const allClips = await res.json();
+    return allClips.filter(c => String(c.registerNumber) === String(reg));
     }
 
-    clips.sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+    async function deleteClip(filename) {
+      const ok = confirm("Delete this clip?");
+      if (!ok) return;
 
-    clips.forEach(c => {
-      const block = document.createElement('div');
-      block.className = 'clip-block';
+      const res = await fetch(`/api/user-clips/${filename}`, { method: "DELETE" });
+      const data = await res.json();
 
-      const audio = document.createElement('audio');
-      audio.controls = true;
-      audio.src = `/uploads/${c.filename}`;
+      if (data.success) {
+        showClips(); // refresh the list
+      } else {
+        alert("Failed to delete clip");
+      }
+    }
 
-      const time = document.createElement('p');
-      time.textContent = `🕒 ${new Date(c.timestamp).toLocaleString()}`;
+    async function showClips() {
+      const clips = await fetchClips();
+      const container = document.getElementById('clips');
+      container.innerHTML = '';
 
-      const delBtn = document.createElement('button');
-      delBtn.textContent = 'Delete';
-      delBtn.onclick = () => deleteClip(c.filename);
+      if (clips.length === 0) {
+        container.innerHTML = '<p>No clips found for this user.</p>';
+        return;
+      }
 
-      block.append(audio, time, delBtn);
-      container.appendChild(block);
-    });
-  } catch (err) {
-    alert("Error loading clips");
-    console.error(err);
-  }
-}
-showClips();
-</script>
+      clips.forEach(c => {
+        const block = document.createElement('div');
+        block.className = 'clip-block';
 
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = `/uploads/${c.filename}`;
+
+        const time = document.createElement('p');
+        time.textContent = `🕒 ${new Date(c.timestamp).toLocaleString()}`;
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = () => deleteClip(c.filename);
+
+        block.appendChild(audio);
+        block.appendChild(time);
+        block.appendChild(delBtn);
+
+        container.appendChild(block);
+      });
+    }
+
+    showClips();
+  </script>
 </body>
 </html>

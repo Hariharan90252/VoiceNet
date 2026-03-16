@@ -9,8 +9,6 @@ const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
-const HOST_URL = process.env.PUBLIC_URL;
-
 
 // ===================== CONFIG =====================
 const PORT = process.env.PORT || 3000;
@@ -195,10 +193,28 @@ const clientId = req.body.clientId || null;
 const filename = req.file.filename;
 const fileUrl = `/uploads/${filename}`;
 await Clip.create({ registerNumber: clientId, filename });
+
+if (clientId) {
+  const user = await User.findOne({ registerNumber: clientId });
+  if (user?.email) {
+    const mailOptions = {
+      from: `"VoiceNet" <${process.env.EMAIL_USER}>`,
+      to: user.email,
+      subject: `📢 New Voice Clip Uploaded`,
+      text: `Hello ${clientId},\nYour clip has been uploaded.\nListen here: ${req.protocol}://${req.get('host')}${fileUrl}`
+    };
+    emailTransporter.sendMail(mailOptions, (err, info) => {
+      if (err) console.error('❌ Email failed:', err);
+      else console.log('✅ Email sent:', info.response);
+    });
+  }
+}
+
 const payload = JSON.stringify({ type: 'audio', clientId, url: fileUrl, ts: Date.now(), mimeType: req.file.mimetype });
 wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
 
 res.json({ ok: true, filename, url: fileUrl });
+
 } catch (err) {
 console.error('Upload error:', err);
 res.status(500).json({ error: 'Upload failed' });
@@ -233,49 +249,28 @@ const data = JSON.parse(msg);
     });
     wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
 
-   
-    // --- EMAIL NOTIFICATION (FINAL FORMAT) ---
-// --- EMAIL NOTIFICATION (SEND TO ALL USERS EXCEPT SENDER) ---
-(async () => {
-  try {
-    const senderReg = sender;
-
-    // Get all users
-    const allUsers = await User.find({});
-
-    for (const u of allUsers) {
-      if (!u.email) continue;            // Skip users without email
-      if (u.registerNumber === senderReg) continue;  // Skip sender
-
-      let subject = "";
-      let text = "";
-
-      if (data.type === "text") {
-        subject = "📨 You have received a text message";
-        text = `You have received a text message from ${senderReg}.\n\nMessage: ${data.message}`;
+    // --- EMAIL NOTIFICATION ---
+    (async () => {
+      try {
+        const user = await User.findOne({ registerNumber: sender });
+        if (user?.email) {
+          let subject = `📢 New ${data.type === 'text' ? 'Message' : 'Voice Clip'} from ${sender}`;
+          let text = data.type === 'text'
+            ? `Hello,\nUser ${sender} has sent a message:\n\n"${data.message}"`
+            : `Hello,\nUser ${sender} has uploaded a voice clip.\nListen here: ${data.url || '/uploads/' + data.filename}`;
+          
+          await emailTransporter.sendMail({
+            from: `"VoiceNet" <${process.env.EMAIL_USER}>`,
+            to: user.email,
+            subject,
+            text
+          });
+          console.log(`✅ Notification email sent to ${user.email}`);
+        }
+      } catch (err) {
+        console.error('❌ Notification email failed:', err);
       }
-if (data.type === "audio") {
-    let audioURL = `${HOST_URL}${data.url}`;  // use HOST_URL instead of req
-    subject = "🎧 You have received an audio clip";
-    text = `You have received an audio clip from ${senderReg}.\n\nListen here: ${audioURL}`;
-}
-
-
-      await emailTransporter.sendMail({
-        from: `"VoiceNet" <${process.env.EMAIL_USER}>`,
-        to: u.email,
-        subject,
-        text,
-      });
-
-      console.log("📩 Email sent to:", u.email);
-    }
-
-  } catch (err) {
-    console.error("❌ Email failed:", err);
-  }
-})();
-
+    })();
   }
 
 } catch (e) {
@@ -362,7 +357,7 @@ app.delete('/api/user-clips/user/:registerNumber', async (req, res) => {
 });
 
 
-// hi
+
 
 // ===================== START SERVER =====================
 server.listen(PORT, () => console.log(`🚀 VoiceNet server running at http://localhost:${PORT}`));

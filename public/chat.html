@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <title>VoiceNet - Text Chat</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
+      font-family: Arial, Helvetica, sans-serif;
       background: linear-gradient(135deg, #f6d365, #fda085);
       margin: 0;
       padding: 16px;
@@ -34,31 +34,12 @@
     }
     .message.right {
       background: #dcedc8;
-    }
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      text-align: right;
     }
     .sender {
       font-size: 0.8rem;
       color: #555;
       margin-top: 4px;
-    }
-    .timestamp {
-      font-size: 0.7rem;
-      color: #888;
-      margin-top: 2px;
-    }
-    .delete-btn {
-      margin-left: 8px;
-      background: #ff4d4d;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      padding: 2px 6px;
-      cursor: pointer;
-      font-size: 0.7rem;
     }
     #chat-input-area {
       display: flex;
@@ -83,16 +64,25 @@
     }
   </style>
 </head>
+
 <body>
 
 <script>
+  // Check login
   const user = localStorage.getItem('voicenet_user');
   if (!user) window.location.href = "login.html";
 </script>
 
 <h1>VoiceNet - Text Chat</h1>
 <button onclick="window.location.href='index.html'"
-        style="margin-top: 12px; padding: 10px 20px; background:#333; color:#fff; border:none; border-radius:6px; cursor:pointer;">
+        style="
+        margin-top: 12px;
+        padding: 10px 20px;
+        background:#333;
+        color:#fff;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;">
   ⬅ Back to Home
 </button>
 
@@ -104,8 +94,12 @@
 </div>
 
 <script>
+  // Force correct WebSocket connection (important fix)
   const ws = new WebSocket(
-    (location.protocol === "https:" ? "wss" : "ws") + "://" + location.hostname + ":3000"
+    (location.protocol === "https:" ? "wss" : "ws") +
+    "://" +
+    location.hostname +
+    ":3000"
   );
 
   const chatBox = document.getElementById("chat-box");
@@ -113,103 +107,46 @@
   const sendBtn = document.getElementById("sendBtn");
   const regno = localStorage.getItem("voicenet_user");
 
-  function loadMessages() {
-    return JSON.parse(localStorage.getItem("chat_messages") || "[]");
-  }
-
-  function saveMessages(messages) {
-    localStorage.setItem("chat_messages", JSON.stringify(messages));
-  }
-
-  function renderMessage(msg, index) {
-    if (!msg.message || typeof msg.message !== "string") return;
-
-    const msgDiv = document.createElement("div");
-    msgDiv.className = "message";
-    if (msg.sender === regno) msgDiv.classList.add("right");
-
-    const row = document.createElement("div");
-    row.className = "row";
-
-    const textSpan = document.createElement("span");
-    textSpan.textContent = msg.message;
-    row.appendChild(textSpan);
-
-    if (msg.sender === regno) {
-      const delBtn = document.createElement("button");
-      delBtn.className = "delete-btn";
-      delBtn.textContent = "✖";
-      delBtn.onclick = () => {
-        const messages = loadMessages();
-        messages.splice(index, 1);
-        saveMessages(messages);
-        showMessages();
-      };
-      row.appendChild(delBtn);
-    }
-
-    msgDiv.appendChild(row);
-
-    const senderTag = document.createElement("div");
-    senderTag.className = "sender";
-    senderTag.textContent = `— ${msg.sender}`;
-    msgDiv.appendChild(senderTag);
-
-    const timeTag = document.createElement("div");
-    timeTag.className = "timestamp";
-    const time = new Date(msg.timestamp || Date.now());
-    timeTag.textContent = isNaN(time.getTime()) ? "🕒 Just now" : time.toLocaleString();
-    msgDiv.appendChild(timeTag);
-
-    chatBox.appendChild(msgDiv);
-  }
-
-  function showMessages() {
-    chatBox.innerHTML = "";
-    const messages = loadMessages();
-    messages.forEach((msg, i) => renderMessage(msg, i));
-    chatBox.scrollTop = chatBox.scrollHeight;
-  }
-
-  function sendMessage() {
-    const message = input.value.trim();
-    if (!message) return;
-
-    const msgObj = {
-      type: "text",
-      message,
-      sender: regno,
-      timestamp: Date.now()
-    };
-
-    ws.send(JSON.stringify(msgObj));
-    input.value = "";
-  }
-
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "login", registerNumber: regno }));
-    showMessages();
+    ws.send(JSON.stringify({
+      type: "login",
+      registerNumber: regno
+    }));
   };
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    if (data.type === "text" && typeof data.message === "string") {
-      if (!data.timestamp) data.timestamp = Date.now();
-      const messages = loadMessages();
-      messages.push(data);
-      saveMessages(messages);
-      showMessages();
+
+    if (data.type === "text") {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "message";
+
+      if (data.sender === regno) msgDiv.classList.add("right");
+
+      msgDiv.textContent = data.message;
+
+      const senderTag = document.createElement("div");
+      senderTag.className = "sender";
+      senderTag.textContent = `— ${data.sender}`;
+      msgDiv.appendChild(senderTag);
+
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
   };
 
-  sendBtn.onclick = sendMessage;
+  sendBtn.onclick = () => {
+    const message = input.value.trim();
+    if (message === "") return;
 
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
+    ws.send(JSON.stringify({
+      type: "text",
+      message,
+      sender: regno
+    }));
+
+    input.value = "";
+  };
 </script>
 
 </body>

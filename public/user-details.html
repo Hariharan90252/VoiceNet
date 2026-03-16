@@ -1,139 +1,205 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>All User Details</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 16px; margin: 0; }
-  h2 { color: #333; font-size: 1.5rem; margin-bottom: 16px; }
-  input, select, button { width: 100%; padding: 10px; margin-bottom: 12px; font-size: 1rem; border-radius: 6px; border: 1px solid #ccc; }
-  .user-block { background: #fff; border-radius: 8px; padding: 14px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-  .user-block h3 { margin: 0 0 10px; font-size: 1.2rem; color: #222; }
-  .user-block p { margin: 6px 0; font-size: 0.95rem; color: #555; }
-  audio { display: block; width: 100%; max-width: 320px; margin: 8px 0; }
-  a { text-decoration: none; color: #333; }
-</style>
+  <meta charset="UTF-8" />
+  <title>All User Details</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 16px;
+      margin: 0;
+    }
+    h2 {
+      color: #333;
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    .user-block {
+      background: #fff;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .user-block h3 {
+      margin: 0 0 10px;
+      font-size: 1.2rem;
+      color: #222;
+    }
+    .user-block p {
+      margin: 6px 0;
+      font-size: 0.95rem;
+      color: #555;
+    }
+    audio {
+      display: block;
+      width: 100%;
+      max-width: 320px;
+      margin: 8px 0;
+    }
+    a {
+      text-decoration: none;
+      color: #333;
+    }
+  </style>
 </head>
 <body>
-<script>
-  const user = localStorage.getItem('voicenet_user');
-  if (!user) window.location.href = 'login.html';
-</script>
+  <script>
+    const user = localStorage.getItem('voicenet_user');
+    if (!user) window.location.href = 'login.html';
+  </script>
 
-<h2>🧑‍💼 All Users + Last Seen + Voice Clips</h2>
-<button onclick="window.location.href='index.html'" style="margin-top:12px;padding:10px 20px;background:#333;color:#fff;border:none;border-radius:6px;cursor:pointer;">
-⬅ Back to Home</button>
+  <h2>🧑‍💼 All Users + Last Seen + Voice Clips</h2>
+<button onclick="window.location.href='index.html'"
+        style="
+        margin-top: 12px;
+        padding: 10px 20px;
+        background:#333;
+        color:#fff;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;">
+  ⬅ Back to Home
+</button>
 
-<input type="text" id="searchBox" placeholder="🔍 Search by Register Number" />
-<select id="sortBox">
-  <option value="none">Sort by...</option>
-  <option value="lastSeen">🕒 Last Seen (Recent First)</option>
-  <option value="clipCount">🔊 Clip Count (High to Low)</option>
-</select>
-<button onclick="window.location.href='/api/export-users'">📥 Export to Excel</button>
+  <input type="text" id="searchBox" placeholder="🔍 Search by Register Number" />
+  <select id="sortBox">
+    <option value="none">Sort by...</option>
+    <option value="lastSeen">🕒 Last Seen (Recent First)</option>
+    <option value="clipCount">🔊 Clip Count (High to Low)</option>
+  </select>
+  <button onclick="window.location.href='/api/export-users'">📥 Export to Excel</button>
 
-<div id="userDetails"></div>
+  <div id="userDetails"></div>
 
-<script>
-async function fetchUserDetails() {
-  const res = await fetch('/api/user-details');
+  <script>
+    async function fetchUserDetails() {
+      const res = await fetch('/api/user-details');
+      return await res.json();
+    }
+
+   async function fetchClips() {
+  const res = await fetch('/api/user-clips'); // ✅ correct
   return await res.json();
 }
 
-async function fetchClips() {
-  const res = await fetch('/api/user-clips');
-  return await res.json();
-}
 
-async function showDetails() {
-  const [users, clips] = await Promise.all([fetchUserDetails(), fetchClips()]);
-  const container = document.getElementById('userDetails');
-  container.innerHTML = '';
+    async function showDetails() {
+    const [users, clips] = await Promise.all([
+  fetchUserDetails(),
+  fetchClips()
+]);
 
-  let filtered = users;
-  const query = document.getElementById('searchBox').value.trim();
-  if (query) filtered = users.filter(u => u.registerNumber.includes(query));
+      const container = document.getElementById('userDetails');
+      container.innerHTML = '';
 
-  const sortType = document.getElementById('sortBox').value;
-  if (sortType === 'lastSeen') {
-    filtered.sort((a,b)=>new Date(b.lastSeen||0)-new Date(a.lastSeen||0));
-  } else if (sortType === 'clipCount') {
-    const clipMap={};
-    clips.forEach(c=>{clipMap[c.registerNumber]=(clipMap[c.registerNumber]||0)+1});
-    filtered.sort((a,b)=>(clipMap[b.registerNumber]||0)-(clipMap[a.registerNumber]||0));
+      let filtered = users;
+      const query = document.getElementById('searchBox').value.trim();
+      if (query) {
+        filtered = users.filter(u => u.registerNumber.includes(query));
+      }
+
+      const sortType = document.getElementById('sortBox').value;
+      if (sortType === 'lastSeen') {
+        filtered.sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
+      }
+      if (sortType === 'clipCount') {
+        const clipMap = {};
+        clips.forEach(c => {
+          clipMap[c.registerNumber] = (clipMap[c.registerNumber] || 0) + 1;
+        });
+        filtered.sort((a, b) => (clipMap[b.registerNumber] || 0) - (clipMap[a.registerNumber] || 0));
+      }
+
+      filtered.forEach(user => {
+        const block = document.createElement('div');
+        block.className = 'user-block';
+
+        const header = document.createElement('h3');
+        const link = document.createElement('a');
+        link.href = `user-clips.html?reg=${user.registerNumber}`;
+        link.textContent = `👤 ${user.registerNumber}`;
+        header.appendChild(link);
+        block.appendChild(header);
+
+        const lastSeen = user.lastSeen
+          ? new Date(user.lastSeen).toLocaleString()
+          : 'Never';
+        const lastSeenTag = document.createElement('p');
+        lastSeenTag.textContent = `🕒 Last Seen: ${lastSeen}`;
+        block.appendChild(lastSeenTag);
+const deleteAllBtn = document.createElement('button');
+deleteAllBtn.textContent = ' Delete All Clips';
+deleteAllBtn.style.marginBottom = '10px';
+deleteAllBtn.onclick = async () => {
+  const confirmDelete = confirm(`Delete ALL clips for ${user.registerNumber}?`);
+  if (!confirmDelete) return;
+
+  const userClips = clips.filter(c => c.registerNumber === user.registerNumber);
+  let deletedCount = 0;
+
+  for (const c of userClips) {
+    const res = await fetch(`/api/user-clips/${c.filename}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) deletedCount++;
   }
 
-  filtered.forEach(user=>{
-    const block=document.createElement('div');
-    block.className='user-block';
+  alert(`✅ Deleted ${deletedCount} clips for ${user.registerNumber}`);
+  showDetails(); // refresh UI
+};
 
-    const header=document.createElement('h3');
-    header.textContent=`👤 ${user.registerNumber}`;
-    block.appendChild(header);
+block.appendChild(deleteAllBtn);
 
-    const lastSeenTag=document.createElement('p');
-    lastSeenTag.textContent=`🕒 Last Seen: ${user.lastSeen ? new Date(user.lastSeen).toLocaleString() : 'Never'}`;
-    block.appendChild(lastSeenTag);
+        const userClips = clips.filter(c => c.registerNumber === user.registerNumber);
+        if (userClips.length === 0) {
+  const none = document.createElement('p');
+  none.textContent = 'No voice clips found.';
+  block.appendChild(none);
+}
+ else {
+          userClips.reverse().forEach(c => {
+  const clipBlock = document.createElement('div');
+  clipBlock.style.marginBottom = '10px';
 
-    const deleteAllBtn=document.createElement('button');
-    deleteAllBtn.textContent='Delete All Clips';
-    deleteAllBtn.style.marginBottom='10px';
-    deleteAllBtn.onclick=async ()=>{
-      const confirmDelete = confirm(`Delete ALL clips for ${user.registerNumber}?`);
-      if(!confirmDelete) return;
-      const userClips = clips.filter(c=>c.registerNumber===user.registerNumber);
-      let deletedCount=0;
-      for(const c of userClips){
-        const res = await fetch(`/api/user-clips/${c.filename}`, { method:'DELETE' });
-        const result = await res.json();
-        if(result.success) deletedCount++;
-      }
-      alert(`✅ Deleted ${deletedCount} clips for ${user.registerNumber}`);
-      showDetails();
-    };
-    block.appendChild(deleteAllBtn);
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.src = `/uploads/${c.filename}`;
 
-    const userClips = clips.filter(c=>c.registerNumber===user.registerNumber);
-    if(userClips.length===0){
-      const none=document.createElement('p');
-      none.textContent='No voice clips found.';
-      block.appendChild(none);
-    } else {
-      userClips.reverse().forEach(c=>{
-        const clipBlock=document.createElement('div');
-        clipBlock.style.marginBottom='10px';
+  const deleteBtn = document.createElement('button');
+  deleteBtn.textContent = ' Delete';
+  deleteBtn.style.marginTop = '6px';
+  deleteBtn.onclick = async () => {
+    const res = await fetch(`/api/user-clips/${c.filename}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) clipBlock.remove();
+    else alert('Failed to delete clip');
+  };
 
-        const audio=document.createElement('audio');
-        audio.controls=true;
-        audio.src=`/uploads/${c.filename}`;
+  clipBlock.appendChild(audio);
+  clipBlock.appendChild(deleteBtn);
+  block.appendChild(clipBlock);
 
-        const deleteBtn=document.createElement('button');
-        deleteBtn.textContent='Delete';
-        deleteBtn.style.marginTop='6px';
-        deleteBtn.onclick=async ()=>{
-          const res=await fetch(`/api/user-clips/${c.filename}`,{method:'DELETE'});
-          const result=await res.json();
-          if(result.success) clipBlock.remove();
-          else alert('Failed to delete clip');
-        };
+});        }
 
-        clipBlock.appendChild(audio);
-        clipBlock.appendChild(deleteBtn);
-        block.appendChild(clipBlock);
+        container.appendChild(block);
       });
     }
 
-    container.appendChild(block);
-  });
-}
+    document.getElementById('searchBox').addEventListener('input', showDetails);
+    document.getElementById('sortBox').addEventListener('change', showDetails);
 
-document.getElementById('searchBox').addEventListener('input', showDetails);
-document.getElementById('sortBox').addEventListener('change', showDetails);
-showDetails();
-</script>
-
+    showDetails();
+  </script>
 </body>
 </html>
